@@ -10,14 +10,28 @@ import android.hardware.security.keymint.Algorithm
 import android.hardware.security.keymint.EcCurve
 import android.hardware.security.keymint.KeyParameter
 import android.hardware.security.keymint.Tag
+import android.os.Build
+import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.system.keystore2.KeyDescriptor
 import android.util.Pair
-import io.github.beakthoven.TrickyStoreOSS.*
 import io.github.beakthoven.TrickyStoreOSS.core.config.Config
 import io.github.beakthoven.TrickyStoreOSS.core.logging.Logger
 import io.github.beakthoven.TrickyStoreOSS.interceptors.SecurityLevelInterceptor
-import org.bouncycastle.asn1.*
+import org.bouncycastle.asn1.ASN1Boolean
+import org.bouncycastle.asn1.ASN1Encodable
+import org.bouncycastle.asn1.ASN1EncodableVector
+import org.bouncycastle.asn1.ASN1Enumerated
+import org.bouncycastle.asn1.ASN1Integer
+import org.bouncycastle.asn1.ASN1ObjectIdentifier
+import org.bouncycastle.asn1.ASN1OctetString
+import org.bouncycastle.asn1.ASN1Sequence
+import org.bouncycastle.asn1.ASN1TaggedObject
+import org.bouncycastle.asn1.DERNull
+import org.bouncycastle.asn1.DEROctetString
+import org.bouncycastle.asn1.DERSequence
+import org.bouncycastle.asn1.DERSet
+import org.bouncycastle.asn1.DERTaggedObject
 import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x509.Extension
 import org.bouncycastle.asn1.x509.KeyUsage
@@ -31,16 +45,21 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import java.io.ByteArrayInputStream
 import java.math.BigInteger
 import java.nio.charset.StandardCharsets
-import java.security.*
+import java.security.KeyPair
+import java.security.KeyPairGenerator
+import java.security.KeyStore
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.security.Security
 import java.security.cert.Certificate
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.RSAKeyGenParameterSpec
-import java.util.*
+import java.util.Date
+import java.util.LinkedList
 import java.util.concurrent.ConcurrentHashMap
 import javax.security.auth.x500.X500Principal
-import android.os.Build
 
 object CertificateHacker {
     
@@ -505,11 +524,11 @@ object CertificateHacker {
         Logger.e("Failed to generate key pair", it) 
     }.getOrNull()
     
-    fun generateChain(uid: Int, params: KeyGenParameters, keyPair: KeyPair): List<ByteArray>? = runCatching {
+    fun generateChain(uid: Int, params: KeyGenParameters, keyPair: KeyPair, securityLevel: Int = 1): List<ByteArray>? = runCatching {
         val keybox = getKeyboxForAlgorithm(params.algorithm) ?: return null
-        
+
         val issuer = X509CertificateHolder(keybox.certificates[0].encoded).subject
-        val leaf = buildCertificate(keyPair, keybox, params, issuer, uid)
+        val leaf = buildCertificate(keyPair, keybox, params, issuer, uid, securityLevel)
         
         val chain = buildList {
             add(leaf)
@@ -525,7 +544,8 @@ object CertificateHacker {
         uid: Int,
         descriptor: KeyDescriptor,
         attestKeyDescriptor: KeyDescriptor?,
-        params: KeyGenParameters
+        params: KeyGenParameters,
+        securityLevel: Int = 1
     ): Pair<KeyPair, List<Certificate>>? = runCatching {
         Logger.i("Requested KeyPair with alias: ${descriptor.alias}")
         
@@ -545,7 +565,7 @@ object CertificateHacker {
             keybox.keyPair to X509CertificateHolder(keybox.certificates[0].encoded).subject
         }
         
-        val leaf = buildCertificate(keyPair, keybox, params, issuer, uid, signingKeyPair)
+        val leaf = buildCertificate(keyPair, keybox, params, issuer, uid, securityLevel, signingKeyPair)
         val chain = buildList {
             add(leaf)
             if (!hasAttestKey) {
@@ -624,7 +644,7 @@ object CertificateHacker {
         }
         
         if (verifiedBootHash == null) {
-            verifiedBootHash = bootHash
+            verifiedBootHash = getBootHashFromProp()
         }
         
         val rootOfTrustElements = arrayOf(
@@ -655,6 +675,7 @@ object CertificateHacker {
         params: KeyGenParameters,
         issuer: X500Name,
         uid: Int,
+        securityLevel: Int = 1,
         signingKeyPair: KeyPair = keybox.keyPair
     ): Certificate {
         val builder = JcaX509v3CertificateBuilder(
@@ -667,7 +688,7 @@ object CertificateHacker {
         )
         
         builder.addExtension(Extension.keyUsage, true, KeyUsage(KeyUsage.keyCertSign))
-        builder.addExtension(createAttestationExtension(params, uid))
+        builder.addExtension(createAttestationExtension(params, uid, securityLevel))
         
         val signerAlgorithm = when (params.algorithm) {
             Algorithm.EC -> "SHA256withECDSA"
@@ -679,10 +700,12 @@ object CertificateHacker {
         return JcaX509CertificateConverter().getCertificate(builder.build(contentSigner))
     }
 
-    private fun createAttestationExtension(params: KeyGenParameters, uid: Int): Extension {
+    private fun createAttestationExtension(params: KeyGenParameters, uid: Int, securityLevel: Int = 1): Extension {
         try {
             val key = bootKey
-            val hash = bootHash
+            val hash = getBootHashFromProp()
+
+            Logger.d("Using boothash ${hash?.toHex() ?: 0}")
             
             val rootOfTrustEncodables = arrayOf(
                 DEROctetString(key),
@@ -751,7 +774,7 @@ object CertificateHacker {
             return Extension(
                 ATTESTATION_OID,
                 false,
-                getAsn1OctetString(teeEnforcedObjects.toTypedArray(), softwareEnforcedObjects, params)
+                getAsn1OctetString(teeEnforcedObjects.toTypedArray(), softwareEnforcedObjects, params, securityLevel)
             )
         } catch (t: Throwable) {
             Logger.e("Failed to create attestation extension", t)
@@ -764,12 +787,13 @@ object CertificateHacker {
     private fun getAsn1OctetString(
         teeEnforcedEncodables: Array<ASN1Encodable>,
         softwareEnforcedEncodables: Array<ASN1Encodable>,
-        params: KeyGenParameters
+        params: KeyGenParameters,
+        securityLevel: Int = 1
     ): ASN1OctetString {
         val attestationVersion = ASN1Integer(io.github.beakthoven.TrickyStoreOSS.attestVersion.toLong())
-        val attestationSecurityLevel = ASN1Enumerated(1)
+        val attestationSecurityLevel = ASN1Enumerated(securityLevel)
         val keymasterVersion = ASN1Integer(io.github.beakthoven.TrickyStoreOSS.keymasterVersion.toLong())
-        val keymasterSecurityLevel = ASN1Enumerated(1)
+        val keymasterSecurityLevel = ASN1Enumerated(securityLevel)
         val attestationChallenge = DEROctetString(params.attestationChallenge ?: ByteArray(0))
         val uniqueId = DEROctetString(ByteArray(0))
         val softwareEnforced = DERSequence(softwareEnforcedEncodables)
@@ -831,4 +855,130 @@ object CertificateHacker {
         return DEROctetString(DERSequence(applicationIdArray).encoded)
     }
 
+}
+
+data class AttestationData(
+    val verifiedBootHash: ByteArray?,
+    val attestVersion: Int?,
+    val keymasterVersion: Int?,
+    val osVersion: Int?,
+)
+
+val keygen_alias = "tricky_store_oss_attest"
+
+val teeStatus: Boolean by lazy { isTEEWorking() }
+
+private fun isTEEWorking(): Boolean {
+    return try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            android.app.ActivityThread.initializeMainlineModules()
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            android.security.keystore2.AndroidKeyStoreProvider.install()
+        } else {
+            android.security.keystore.AndroidKeyStoreProvider.install()
+        }
+
+        val keyStore = KeyStore.getInstance("AndroidKeyStore")
+        keyStore.load(null)
+
+        val keyPairGenerator = KeyPairGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
+
+        val challenge = ByteArray(16).apply {
+            SecureRandom().nextBytes(this)
+        }
+
+        val parameterSpec = KeyGenParameterSpec.Builder(
+            keygen_alias,
+            KeyProperties.PURPOSE_SIGN
+        )
+            .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+            .setDigests(KeyProperties.DIGEST_SHA256)
+            .setAttestationChallenge(challenge)
+            .setIsStrongBoxBacked(false)
+            .build()
+
+        keyPairGenerator.initialize(parameterSpec)
+        keyPairGenerator.generateKeyPair()
+
+        Logger.d("TEE check: successful")
+
+        // keyStore.deleteEntry(keygen_alias)
+        true
+    } catch (e: Exception) {
+        Logger.w("TEE check failure: ${e.message}")
+        false
+    }
+}
+
+private fun getAttestCert(): X509Certificate? {
+    return if (teeStatus) {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore")
+        keyStore.load(null)
+        
+        val certChain = keyStore.getCertificateChain(keygen_alias)
+        if (certChain == null || certChain.isEmpty()) {
+            null
+        } else {
+            keyStore.deleteEntry(keygen_alias)
+            certChain[0] as X509Certificate
+        }
+    } else {
+        null
+    }
+}
+
+fun getAttestData(): AttestationData? {
+    val leaf: X509Certificate = getAttestCert() ?: return null
+    val ATTESTATION_OID = ASN1ObjectIdentifier("1.3.6.1.4.1.11129.2.1.17")
+
+    return try {
+        val leafHolder = X509CertificateHolder(leaf.encoded)
+        val ext: Extension = leafHolder.getExtension(ATTESTATION_OID) ?: run {
+            Logger.i("No attestation extension found on certificate")
+            return null
+        }
+
+        val keyDescriptionSeq = ASN1Sequence.getInstance(ext.extnValue.octets)
+        val encodables = keyDescriptionSeq.toArray()
+
+        val attestVersion = ASN1Integer.getInstance(encodables[0]).value.intValueExact()
+        val keymasterVersion = ASN1Integer.getInstance(encodables[2]).value.intValueExact()
+        var attestVerifiedBootHash: ByteArray? = null
+        var attestOSVersion: Int? = null
+
+        val teeEnforced = ASN1Sequence.getInstance(encodables[7])
+
+        teeEnforced.forEach { element ->
+            val tagged = element as ASN1TaggedObject
+            when (tagged.tagNo) {
+                704 -> { // Parse Root of Trust
+                    val rootOfTrustSeq = ASN1Sequence.getInstance(tagged.baseObject.toASN1Primitive())
+                    if (rootOfTrustSeq.size() >= 4) {
+                        attestVerifiedBootHash = ASN1OctetString.getInstance(rootOfTrustSeq.getObjectAt(3)).octets
+                    }
+                }
+                705 -> { // Parse OS Version
+                    attestOSVersion = ASN1Integer.getInstance(tagged.baseObject.toASN1Primitive()).value.intValueExact()
+                }
+            }
+        }
+
+        Logger.i("Extracted attestationVersion: $attestVersion")
+        Logger.i("Extracted keymasterVersion: $keymasterVersion")
+        Logger.i("Extracted verifiedBootHash: ${attestVerifiedBootHash?.toHex() ?: 0}")
+        Logger.i("Extracted osVersion: $attestOSVersion")
+
+        AttestationData(
+            verifiedBootHash = attestVerifiedBootHash,
+            attestVersion = attestVersion,
+            keymasterVersion = keymasterVersion,
+            osVersion = attestOSVersion
+        )
+    } catch (e: Exception) {
+        Logger.e("Failed to parse attestation data", e)
+        null
+    }
 }

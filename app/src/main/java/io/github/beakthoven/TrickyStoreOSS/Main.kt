@@ -18,6 +18,7 @@ fun main(args: Array<String>) {
     Logger.i("Welcome to TrickyStoreOSS!")
     
     try {
+        setupBootHash()
         initializeInterceptors()
         maintainService()
     } catch (e: Exception) {

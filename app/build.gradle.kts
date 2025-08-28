@@ -92,7 +92,6 @@ android {
 dependencies {
     compileOnly(project(":stub"))
     compileOnly(libs.annotation)
-    compileOnly(libs.dev.rikka.hidden.stub)
     implementation(libs.org.bouncycastle.bcpkix.jdk18on)
     implementation(libs.org.lsposed.libcxx.libcxx)
 }

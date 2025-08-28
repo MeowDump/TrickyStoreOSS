@@ -6,18 +6,12 @@
 package io.github.beakthoven.TrickyStoreOSS.core.config
 
 import android.content.pm.IPackageManager
-import android.os.Build
 import android.os.FileObserver
 import android.os.ServiceManager
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import io.github.beakthoven.TrickyStoreOSS.CertificateHacker
 import io.github.beakthoven.TrickyStoreOSS.core.logging.Logger
+import io.github.beakthoven.TrickyStoreOSS.teeStatus
 import java.io.File
-import java.security.KeyPairGenerator
-import java.security.KeyStore
-import java.security.SecureRandom
-import java.security.spec.ECGenParameterSpec
 
 object Config {
     private val hackPackages = mutableSetOf<String>()
@@ -74,58 +68,12 @@ object Config {
     @Volatile
     private var teeBroken: Boolean? = null
 
-    private fun isTEEWorking(): Boolean {
-        val alias = "tee_attest_test_key"
-        return try {
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                android.app.ActivityThread.initializeMainlineModules();
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                android.security.keystore2.AndroidKeyStoreProvider.install();
-            } else {
-                android.security.keystore.AndroidKeyStoreProvider.install();
-            }
-
-            val keyStore = KeyStore.getInstance("AndroidKeyStore")
-            keyStore.load(null)
-
-            val keyPairGenerator = KeyPairGenerator.getInstance(
-                KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
-
-            val challenge = ByteArray(16).apply {
-                SecureRandom().nextBytes(this)
-            }
-
-            val parameterSpec = KeyGenParameterSpec.Builder(
-                alias,
-                KeyProperties.PURPOSE_SIGN
-            )
-                .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
-                .setDigests(KeyProperties.DIGEST_SHA256)
-                .setAttestationChallenge(challenge)
-                .setIsStrongBoxBacked(false)
-                .build()
-
-            keyPairGenerator.initialize(parameterSpec)
-            keyPairGenerator.generateKeyPair()
-
-            keyStore.deleteEntry(alias)
-            true
-        } catch (e: Exception) {
-            Logger.e("TEE check failure: ${e.message}")
-            false
-        }
-    }
-
-
     private fun storeTEEStatus(root: File) {
         val statusFile = File(root, TEE_STATUS_FILE)
-        val status = isTEEWorking()
-        teeBroken = !status
+        teeBroken = !teeStatus
         try {
-            statusFile.writeText("teeBroken=${!status}")
+            statusFile.writeText("teeBroken=${teeBroken}")
+            Logger.i("TEE status written to $statusFile: teeBroken=$teeBroken") 
         } catch (e: Exception) {
             Logger.e("Failed to write TEE status: ${e.message}")
         }

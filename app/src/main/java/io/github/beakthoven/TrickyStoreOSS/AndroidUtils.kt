@@ -23,18 +23,59 @@ fun getTransactCode(clazz: Class<*>, method: String): Int =
     clazz.getDeclaredField("TRANSACTION_$method").apply { isAccessible = true }
         .getInt(null)
 
-val bootHash: ByteArray by lazy {
-    getBootHashFromProp() ?: randomBytes()
+// cache attest data to avoid running attestation multiple times
+private val cachedAttestData: AttestationData? by lazy {
+    getAttestData() // from CertHacker
 }
 
 val bootKey: ByteArray by lazy {
     randomBytes()
 }
 
+fun setupBootHash() {
+    getBootHashFromProp()?.also { 
+        Logger.d("Using boot hash from system property: ${it.toHex()}")
+    }
+    ?: getBootHashFromAttestation()?.also { 
+        Logger.d("Using boot hash from attestation: ${it.toHex()}")
+        setBootHashProp(it)
+    }
+    ?: randomBytes().also { 
+        Logger.d("Generating random boot hash: ${it.toHex()}")
+        setBootHashProp(it)
+    }
+}
+
 @OptIn(ExperimentalStdlibApi::class)
-private fun getBootHashFromProp(): ByteArray? {
+fun getBootHashFromProp(): ByteArray? {
     val digest = SystemProperties.get("ro.boot.vbmeta.digest", null) ?: return null
+    Logger.d("System property ro.boot.vbmeta.digest: $digest")
+    
+    if (digest.isBlank()) {
+        Logger.d("Property is blank")
+        return null
+    }
+    
     return if (digest.length == 64) digest.hexToByteArray() else null
+}
+
+private fun getBootHashFromAttestation(): ByteArray? {
+    return try {
+        cachedAttestData?.verifiedBootHash
+    } catch (e: Exception) {
+        Logger.e("Failed to get boot hash from attestation: ${e.message}")
+        null
+    }
+}
+
+private fun setBootHashProp(bytes: ByteArray) {
+    val hex = bytes.toHex()
+    try {
+        Logger.d("Setting ro.boot.vbmeta.digest to: $hex")
+        SystemProperties.set("ro.boot.vbmeta.digest", hex)
+    } catch (e: Exception) {
+        Logger.e("Exception setting vbmeta digest: ${e.message}")
+    }
 }
 
 private fun randomBytes(): ByteArray = ByteArray(32).also { 
@@ -114,9 +155,6 @@ private fun parsePatchLevelValue(value: String, component: String, isLong: Boole
     }
 }
 
-val osVersion: Int
-    get() = getOsVersion(Build.VERSION.SDK_INT)
-
 private val osVersionMap = mapOf(
     Build.VERSION_CODES.BAKLAVA to 160000,
     Build.VERSION_CODES.VANILLA_ICE_CREAM to 150000,
@@ -128,7 +166,8 @@ private val osVersionMap = mapOf(
     Build.VERSION_CODES.Q to 100000
 )
 
-private fun getOsVersion(sdkVersion: Int): Int = osVersionMap[sdkVersion] ?: 160000
+val osVersion: Int
+    get() = cachedAttestData?.osVersion ?: osVersionMap[Build.VERSION.SDK_INT] ?: 160000
 
 private val attestVersionMap = mapOf(
     Build.VERSION_CODES.Q to 4,                   // Keymaster 4.1
@@ -142,11 +181,10 @@ private val attestVersionMap = mapOf(
 )
 
 val attestVersion: Int
-    get() = attestVersionMap[Build.VERSION.SDK_INT] ?: 400
+    get() = cachedAttestData?.attestVersion ?: attestVersionMap[Build.VERSION.SDK_INT] ?: 400
 
 val keymasterVersion: Int
-    get() = if (attestVersion == 4) 41 else attestVersion
-
+    get() = cachedAttestData?.keymasterVersion ?: if (attestVersion == 4) 41 else attestVersion
 
 fun String.convertPatchLevel(isLong: Boolean): Int = runCatching {
     val parts = split("-")
@@ -196,3 +234,4 @@ val moduleHash: ByteArray by lazy {
 }
 
 fun String.trimLine(): String = trim().split("\n").joinToString("\n") { it.trim() }
+fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
