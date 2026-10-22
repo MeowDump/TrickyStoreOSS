@@ -136,16 +136,9 @@ androidComponents {
                 check(apks.size == 1) { "Expected exactly one APK output for $variantName, found ${apks.size}" }
                 val apk = apks.single()
 
-                ZipFile(apk).use { zip ->
-                    if (variantName.contains("debug", ignoreCase = true)) {
-                        apk.copyTo(tempDir.resolve("attestation.apk"), overwrite = true)
-                    } else {
-                        val dex = zip.getEntry("attestation.dex") ?: error("Release APK does not contain attestation.dex")
-                        zip.getInputStream(dex).use { input ->
-                            tempDir.resolve("attestation.dex").outputStream().use(input::copyTo)
-                        }
-                    }
+                apk.copyTo(tempDir.resolve("attestation.apk"), overwrite = true)
 
+                ZipFile(apk).use { zip ->
                     val entries = zip.entries()
                     while (entries.hasMoreElements()) {
                         val entry = entries.nextElement()
