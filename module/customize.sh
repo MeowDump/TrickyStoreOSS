@@ -53,6 +53,11 @@ for remove_id in oh_my_keymint teesim; do
     fi
 done
 
+if [ -d /data/adb/modules/teesim ]; then
+    touch /data/adb/modules/teesim/remove
+    ui_print "! TEE Simulator module will be removed on next reboot"
+fi
+
 # --- Installation ---
 ui_print "- Extracting module files"
 for file in customize.sh module.prop post-fs-data.sh service.sh sepolicy.rule daemon; do
