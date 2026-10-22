@@ -3,12 +3,12 @@
 MODDIR=$1
 
 # Determine classpath
-if [ -f "$MODDIR/classes.dex" ]; then
-    CLASSPATH="$MODDIR/classes.dex"
-elif [ -f "$MODDIR/service.apk" ]; then
-    CLASSPATH="$MODDIR/service.apk"
+if [ -f "$MODDIR/attestation.dex" ]; then
+    CLASSPATH="$MODDIR/attestation.dex"
+elif [ -f "$MODDIR/attestation.apk" ]; then
+    CLASSPATH="$MODDIR/attestation.apk"
 else
-    echo "Error: Neither classes.dex nor service.apk found in $MODDIR"
+    echo "Error: Neither attestation.dex nor attestation.apk found in $MODDIR"
     exit 1
 fi
 

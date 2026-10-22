@@ -1,9 +1,11 @@
 ## About
-This project is modified to work as sub-module for [Integrity-Box](https://github.com/MeowDump/Integrity-Box) ecosystem
+This project is modified to work as sub-module for [Integrity-Box](https://github.com/MeowDump/Integrity-Box) ecosystem. 
 
 It is based on the original [Tricky-Store-OOS](https://github.com/beakthoven/TrickyStoreOSS) codebase and has been substantially adapted for its current purpose
 
 For more details, read [Tricky-Store-OOS's documentations](https://github.com/beakthoven/TrickyStoreOSS/blob/main/README.md#tricky-store-oss)
+
+_Make sure IntegrityBox is already installed if you are going to flash [NIGHTLY BUILD](https://nightly.link/MeowDump/TrickyStoreOSS/workflows/build/integrity-box?preview)_
 #
 
 ### License

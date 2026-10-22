@@ -2,8 +2,13 @@
 SKIPUNZIP=1
 MIN_SDK=29
 CONFIG_DIR=/data/adb/tricky_store
+INTEGRITY_BOX=/data/adb/modules/playintegrityfix
 
 # --- Installation Context Check ---
+if [ -d "$INTEGRITY_BOX/toolkit" ]; then
+  abort "! Install Integrity Box & reboot, then flash me"
+fi
+
 if [ "$BOOTMODE" != true ]; then
   ui_print "! Please install in Magisk Manager or KernelSU Manager"
   abort "! Install from recovery is NOT supported"
@@ -46,39 +51,39 @@ install_file() {
 }
 
 # --- Remove any conflicting modules ---
-for remove_id in oh_my_keymint teesim; do
+for remove_id in tricky_store oh_my_keymint teesim; do
     if [ -d "/data/adb/modules/$remove_id" ]; then
-        touch "/data/adb/modules/$remove_id/remove"
+        rm -rf "/data/adb/modules/$remove_id/remove"
         ui_print "! $(grep_prop name "/data/adb/modules/$remove_id/module.prop") module will be removed on next reboot"
     fi
 done
 
 # --- Installation ---
 ui_print "- Extracting module files"
-for file in customize.sh module.prop post-fs-data.sh service.sh sepolicy.rule daemon; do
-  install_file "$file" "$MODPATH"
+for file in sepolicy.rule daemon; do
+  install_file "$file" "$INTEGRITY_BOX"
 done
 
-# Handle service.apk or classes.dex
-if unzip -l "$ZIPFILE" | grep -q "service.apk"; then
-  install_file "service.apk" "$MODPATH"
-elif unzip -l "$ZIPFILE" | grep -q "classes.dex"; then
-  install_file "classes.dex" "$MODPATH"
+# Handle attestation.apk or attestation.dex
+if unzip -l "$ZIPFILE" | grep -q "attestation.apk"; then
+  install_file "attestation.apk" "$INTEGRITY_BOX"
+elif unzip -l "$ZIPFILE" | grep -q "attestation.dex"; then
+  install_file "attestation.dex" "$INTEGRITY_BOX"
 else
-  abort "! Neither service.apk nor classes.dex found"
+  abort "! Neither attestation.apk nor attestation.dex found"
 fi
 
-chmod 755 "$MODPATH/daemon"
+chmod 755 "$INTEGRITY_BOX/daemon"
 ui_print ""
 
 
 ui_print "- Extracting $ARCH libraries"
-install_file "lib/$ABI_DIR/libTrickyStoreOSS.so" "$MODPATH"
-install_file "lib/$ABI_DIR/libinject.so" "$MODPATH"
+install_file "lib/$ABI_DIR/libTrickyStoreOSS.so" "$INTEGRITY_BOX"
+install_file "lib/$ABI_DIR/libinject.so" "$INTEGRITY_BOX"
 ui_print ""
 
-mv "$MODPATH/libinject.so" "$MODPATH/inject"
-chmod 755 "$MODPATH/inject"
+mv "$INTEGRITY_BOX/libinject.so" "$INTEGRITY_BOX/inject"
+chmod 755 "$INTEGRITY_BOX/inject"
 
 # --- Configuration Files ---
 if [ ! -d "$CONFIG_DIR" ]; then
@@ -86,12 +91,5 @@ if [ ! -d "$CONFIG_DIR" ]; then
   mkdir -p "$CONFIG_DIR"
 fi
 
-if [ ! -f "$CONFIG_DIR/keybox.xml" ]; then
-  ui_print "- Adding AOSP software keybox"
-  install_file "keybox.xml" "$CONFIG_DIR"
-fi
-
-if [ ! -f "$CONFIG_DIR/target.txt" ]; then
-  ui_print "- Adding default target scope"
-  install_file "target.txt" "$CONFIG_DIR"
-fi
+ui_print ""
+abort "! CI Update complete"

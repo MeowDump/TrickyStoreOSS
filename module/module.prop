@@ -1,7 +1,6 @@
-id=tricky_store
-name=Tricky Store OSS
-version=REPLACEMEVER
+id=auto_generated
+name=Auto Generated
+version=CI Updater
 versionCode=REPLACEMEVERCODE
-author=beakthoven
-description=A trick of keystore but open source.
-updateJson=https://raw.githubusercontent.com/beakthoven/TrickyStoreOSS/main/update.json
+author=beakthoven & 𝗠𝗘𝗢𝗪𝗻𝗮 💅
+description=This module will be removed automatically after next reboot

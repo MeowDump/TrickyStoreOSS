@@ -113,7 +113,7 @@ androidComponents {
                 sourceDir.walkTopDown()
                     .filter { file ->
                         file.isFile &&
-                            file.name !in setOf("module.prop", "service.apk", "classes.dex") &&
+                            file.name !in setOf("module.prop", "attestation.apk", "attestation.dex") &&
                             !file.relativeTo(sourceDir).invariantSeparatorsPath.startsWith("lib/")
                     }
                     .forEach { file ->
@@ -138,11 +138,11 @@ androidComponents {
 
                 ZipFile(apk).use { zip ->
                     if (variantName.contains("debug", ignoreCase = true)) {
-                        apk.copyTo(tempDir.resolve("service.apk"), overwrite = true)
+                        apk.copyTo(tempDir.resolve("attestation.apk"), overwrite = true)
                     } else {
-                        val dex = zip.getEntry("classes.dex") ?: error("Release APK does not contain classes.dex")
+                        val dex = zip.getEntry("attestation.dex") ?: error("Release APK does not contain attestation.dex")
                         zip.getInputStream(dex).use { input ->
-                            tempDir.resolve("classes.dex").outputStream().use(input::copyTo)
+                            tempDir.resolve("attestation.dex").outputStream().use(input::copyTo)
                         }
                     }
 

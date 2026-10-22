@@ -2,14 +2,14 @@ name: Build
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "integrity-box" ]
     paths-ignore:
       - '**.md'
       - '.github/**'
       - '!.github/workflows/**'
       - 'update.json'
   pull_request:
-    branches: [ "main" ]
+    branches: [ "integrity-box" ]
     paths-ignore:
       - '**.md'
       - '.github/**'
