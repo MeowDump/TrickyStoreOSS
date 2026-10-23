@@ -60,10 +60,11 @@ jobs:
 
       - name: Prepare artifact
         id: prepareArtifact
+        shell: bash
         run: |
           set -e
-          RELEASE_FILE=$(find out -name "*Release*.zip" | head -1)
-          DEBUG_FILE=$(find out -name "*Debug*.zip" | head -1)
+          RELEASE_FILE=$(find out -type f -name "*Release*.zip" ! -name "Tricky Backend CI-*" -print -quit)
+          DEBUG_FILE=$(find out -type f -name "*Debug*.zip" ! -name "Tricky Backend CI-*" -print -quit)
 
           if [[ -z "$RELEASE_FILE" || -z "$DEBUG_FILE" ]]; then
             echo "::error::Could not find release or debug files in out/"
@@ -71,21 +72,29 @@ jobs:
             exit 1
           fi
 
-          echo "releaseName=$(basename "$RELEASE_FILE" .zip)" >> "$GITHUB_OUTPUT"
-          echo "debugName=$(basename "$DEBUG_FILE" .zip)" >> "$GITHUB_OUTPUT"
-          echo "releaseFile=$RELEASE_FILE" >> "$GITHUB_OUTPUT"
-          echo "debugFile=$DEBUG_FILE" >> "$GITHUB_OUTPUT"
+          RUN_NAME="Tricky Backend CI-${GITHUB_RUN_NUMBER}"
+          RELEASE_OUTPUT="out/${RUN_NAME} Release.zip"
+          DEBUG_OUTPUT="out/${RUN_NAME} Debug.zip"
 
-          for ZIP in "$RELEASE_FILE" "$DEBUG_FILE"; do
+          mv "$RELEASE_FILE" "$RELEASE_OUTPUT"
+          mv "$DEBUG_FILE" "$DEBUG_OUTPUT"
+
+          for ZIP in "$RELEASE_OUTPUT" "$DEBUG_OUTPUT"; do
             if ! unzip -Z1 "$ZIP" | grep -qx "attestation.dex"; then
               echo "::error::$(basename "$ZIP") does not contain attestation.dex"
               exit 1
             fi
+
             if unzip -Z1 "$ZIP" | grep -qx "attestation.apk"; then
               echo "::error::$(basename "$ZIP") unexpectedly contains attestation.apk"
               exit 1
             fi
           done
+
+          echo "releaseName=${RUN_NAME} Release" >> "$GITHUB_OUTPUT"
+          echo "debugName=${RUN_NAME} Debug" >> "$GITHUB_OUTPUT"
+          echo "releaseFile=$RELEASE_OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "debugFile=$DEBUG_OUTPUT" >> "$GITHUB_OUTPUT"
 
       - name: Upload release
         uses: actions/upload-artifact@v7
@@ -103,41 +112,14 @@ jobs:
           retention-days: 7
           archive: false
 
-      - name: Upload release mappings
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-mappings-${{ github.run_number }}
-          path: "./app/build/outputs/mapping/release"
-          retention-days: 30
-          compression-level: 9
-
       - name: Summary
         if: always()
         run: |
-          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Gradle Tasks**: assembleRelease, assembleDebug, lintRelease" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status**: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Gradle Tasks**: assembleRelease, assembleDebug, lintRelease" >> "$GITHUB_STEP_SUMMARY"
+
           if [[ "${{ job.status }}" == "success" ]]; then
-            echo "- **Release Artifact**: ${{ steps.prepareArtifact.outputs.releaseName }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Debug Artifact**: ${{ steps.prepareArtifact.outputs.debugName }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Release Artifact**: Tricky Backend CI-${GITHUB_RUN_NUMBER} Release.zip" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Debug Artifact**: Tricky Backend CI-${GITHUB_RUN_NUMBER} Debug.zip" >> "$GITHUB_STEP_SUMMARY"
           fi
-
-  dependency-submission:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    permissions:
-      contents: write
-    steps:
-      - name: Check out
-        uses: actions/checkout@v7
-        with:
-          submodules: "recursive"
-
-      - name: Setup Java
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 26
-
-      - name: Submit dependency graph
-        uses: gradle/actions/dependency-submission@v6.4.0
