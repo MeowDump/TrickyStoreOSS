@@ -1,7 +1,7 @@
 # shellcheck shell=sh
 # shellcheck disable=SC2034,SC2086
 DEBUG=false
-MODDIR=${0%/*}
+MODDIR=/data/adb/modules/playintegrityfix
 [ "$MODDIR" = "$0" ] && MODDIR=.
 MODDIR=$(unset CDPATH; cd -- "$MODDIR" 2>/dev/null && pwd) || exit 1
 
@@ -9,6 +9,10 @@ MAX_FAILURES=${TSOSS_SUPERVISOR_MAX_FAILURES:-5}
 STABILITY_SECONDS=${TSOSS_SUPERVISOR_STABILITY_SECONDS:-30}
 BACKOFF_MAX=${TSOSS_SUPERVISOR_BACKOFF_MAX:-16}
 LOCKDIR="$MODDIR/.service.lock"
+
+# Exit if TS is disabled by user
+[ -f "/data/adb/modules/playintegrityfix/sepolicy.rule" ] || exit 1
+[ -f "/data/adb/modules/playintegrityfix/disable" ] || exit 1
 
 case "$MAX_FAILURES" in
   ''|*[!0-9]*|0) MAX_FAILURES=5 ;;
@@ -24,11 +28,8 @@ esac
 [ "$BACKOFF_MAX" -gt 300 ] && BACKOFF_MAX=300
 
 if [ "${1:-}" != --worker ] && [ "${TSOSS_SUPERVISOR_FOREGROUND:-false}" != true ]; then
-  if command -v log >/dev/null 2>&1; then
-    sh "$0" --worker </dev/null 2>&1 | log -t TrickyStoreOSS &
-  else
-    sh "$0" --worker </dev/null >"$MODDIR/service.log" 2>&1 &
-  fi
+  # Launch a detached worker with direct file redirection
+  sh "$0" --worker </dev/null >>"$MODDIR/service.log" 2>&1 &
   exit 0
 fi
 
@@ -47,7 +48,7 @@ is_service_process() {
   [ "$service_cwd" = "$MODDIR" ] || return 1
   service_cmdline=$(tr '\000' ' ' < "/proc/$service_pid/cmdline" 2>/dev/null) || return 1
   case "$service_cmdline" in
-    *service.sh*) return 0 ;;
+    *tricky.sh*|*service.sh*) return 0 ;;
   esac
   return 1
 }
@@ -78,19 +79,28 @@ run_supervisor() {
     echo "TrickyStoreOSS: cannot enter module directory: $MODDIR"
     return 1
   fi
+  echo "TrickyStoreOSS: supervisor started; module directory: $MODDIR"
 
   if ! mkdir "$LOCKDIR" 2>/dev/null; then
     lock_owner_state
     owner_state=$?
-    [ "$owner_state" -eq 0 ] && return 0
-    [ "$owner_state" -eq 2 ] && return 0
+    if [ "$owner_state" -eq 0 ]; then
+      echo "TrickyStoreOSS: another valid supervisor owns lock (pid $(cat "$LOCKDIR/pid" 2>/dev/null)); exiting duplicate worker"
+      return 0
+    fi
+    if [ "$owner_state" -eq 2 ]; then
+      echo "TrickyStoreOSS: lock state is ambiguous; leaving it untouched"
+      return 0
+    fi
     if ! mkdir "$LOCKDIR/reap" 2>/dev/null; then
+      echo "TrickyStoreOSS: another worker is checking the lock; exiting"
       return 0
     fi
     lock_owner_state
     owner_state=$?
     if [ "$owner_state" -ne 1 ]; then
       rmdir "$LOCKDIR/reap" 2>/dev/null || true
+      echo "TrickyStoreOSS: lock changed during stale-lock check; exiting safely"
       return 0
     fi
     rm -rf "$LOCKDIR"
@@ -138,6 +148,7 @@ run_supervisor() {
   while [ "$failures" -lt "$MAX_FAILURES" ]; do
     attempt=$((failures + 1))
     started=$(date +%s)
+    echo "TrickyStoreOSS: starting daemon (attempt $attempt)"
     ./daemon "$MODDIR"
     status=$?
     finished=$(date +%s)
@@ -167,4 +178,5 @@ run_supervisor() {
   done
 }
 
+echo "TrickyStoreOSS: worker started (pid $$)"
 run_supervisor

@@ -2,7 +2,7 @@
 set -eu
 
 ROOT=$(unset CDPATH; cd -- "$(dirname -- "$0")/.." && pwd)
-SERVICE="$ROOT/module/service.sh"
+SERVICE="$ROOT/module/tricky.sh"
 TMP=${TMPDIR:-/tmp}/tsoss-supervisor-test.$$
 lock_owner=
 trap 'if [ -n "$lock_owner" ]; then kill "$lock_owner" 2>/dev/null || true; fi; rm -rf "$TMP"' EXIT HUP INT TERM
@@ -18,7 +18,7 @@ run_case() {
   shift
   dir="$TMP/$name"
   mkdir -p "$dir"
-  cp "$SERVICE" "$dir/service.sh"
+  cp "$SERVICE" "$dir/tricky.sh"
   cat > "$dir/daemon" <<'MOCK'
 #!/bin/sh
 printf '%s\n' "$*" >> "$MOCK_LOG"
@@ -38,7 +38,7 @@ MOCK
   set +e
   (cd "$dir" && env TSOSS_SUPERVISOR_MAX_FAILURES="${MAX_FAILURES:-3}" \
     TSOSS_SUPERVISOR_STABILITY_SECONDS="${STABILITY_SECONDS:-2}" \
-    TSOSS_SUPERVISOR_BACKOFF_MAX=1 "$@" sh ./service.sh) > "$dir/log" 2>&1
+    TSOSS_SUPERVISOR_BACKOFF_MAX=1 "$@" sh ./tricky.sh) > "$dir/log" 2>&1
   result=$?
   set -e
   count=$(wc -l < "$MOCK_LOG" | tr -d ' ')
@@ -49,7 +49,7 @@ run_foreground() {
   name=$1 mode=$2 failures=$3 stable=$4
   dir="$TMP/$name"
   mkdir -p "$dir"
-  cp "$SERVICE" "$dir/service.sh"
+  cp "$SERVICE" "$dir/tricky.sh"
   cat > "$dir/daemon" <<'MOCK'
 #!/bin/sh
 printf '%s\n' "$*" >> "$MOCK_LOG"
@@ -68,7 +68,7 @@ MOCK
   set +e
   (cd "$dir" && TSOSS_SUPERVISOR_MAX_FAILURES="$failures" \
     TSOSS_SUPERVISOR_STABILITY_SECONDS="$stable" TSOSS_SUPERVISOR_BACKOFF_MAX=1 \
-    TSOSS_SUPERVISOR_FOREGROUND=true sh ./service.sh --worker) > "$dir/log" 2>&1
+    TSOSS_SUPERVISOR_FOREGROUND=true sh ./tricky.sh --worker) > "$dir/log" 2>&1
   result=$?
   set -e
   count=$(wc -l < "$MOCK_LOG" | tr -d ' ')
@@ -104,7 +104,7 @@ grep -q 'stability reset' "$(read_dir "$reset")/log" || fail "missing stability 
 
 # A live supervisor owner prevents an additional daemon from starting.
 mkdir -p "$TMP/locked"
-cp "$SERVICE" "$TMP/locked/service.sh"
+cp "$SERVICE" "$TMP/locked/tricky.sh"
 cat > "$TMP/locked/daemon" <<'MOCK'
 #!/bin/sh
 printf '%s\n' "$$" > "$LOCKED_DAEMON_PID"
@@ -112,7 +112,7 @@ exec sleep 60
 MOCK
 chmod +x "$TMP/locked/daemon"
 export LOCKED_DAEMON_PID="$TMP/locked/daemon.pid"
-(cd "$TMP/locked" && TSOSS_SUPERVISOR_FOREGROUND=true sh ./service.sh --worker) > "$TMP/locked/log" 2>&1 &
+(cd "$TMP/locked" && TSOSS_SUPERVISOR_FOREGROUND=true sh ./tricky.sh --worker) > "$TMP/locked/log" 2>&1 &
 lock_owner=$!
 waited=0
 while [ ! -e "$TMP/locked/.service.lock/starttime" ] && [ "$waited" -lt 5 ]; do
@@ -121,10 +121,10 @@ while [ ! -e "$TMP/locked/.service.lock/starttime" ] && [ "$waited" -lt 5 ]; do
 done
 [ -e "$TMP/locked/.service.lock/starttime" ] || fail "live supervisor did not write identity"
 [ -s "$LOCKED_DAEMON_PID" ] || fail "live supervisor did not start daemon"
-(cd "$TMP/locked" && sh ./service.sh) >/dev/null 2>&1
+(cd "$TMP/locked" && sh ./tricky.sh) >/dev/null 2>&1
 [ -e "$TMP/locked/.service.lock" ] || fail "contending supervisor removed live lock"
 rm -f "$TMP/locked/.service.lock/boot_id" "$TMP/locked/.service.lock/starttime"
-(cd "$TMP/locked" && sh ./service.sh) >/dev/null 2>&1
+(cd "$TMP/locked" && sh ./tricky.sh) >/dev/null 2>&1
 [ -e "$TMP/locked/.service.lock" ] || fail "legacy live supervisor lock was not preserved"
 kill -TERM "$lock_owner" 2>/dev/null || true
 kill -TERM "$(cat "$LOCKED_DAEMON_PID")" 2>/dev/null || true
@@ -133,7 +133,7 @@ lock_owner=
 
 # A live unrelated PID must not block a new supervisor when its legacy lock is stale.
 mkdir -p "$TMP/reused"
-cp "$SERVICE" "$TMP/reused/service.sh"
+cp "$SERVICE" "$TMP/reused/tricky.sh"
 cat > "$TMP/reused/daemon" <<'MOCK'
 #!/bin/sh
 exit 99
@@ -144,7 +144,7 @@ unrelated_pid=$!
 mkdir -p "$TMP/reused/.service.lock"
 printf '%s\n' "$unrelated_pid" > "$TMP/reused/.service.lock/pid"
 set +e
-(cd "$TMP/reused" && TSOSS_SUPERVISOR_MAX_FAILURES=1 TSOSS_SUPERVISOR_FOREGROUND=true sh ./service.sh --worker) > "$TMP/reused/log" 2>&1
+(cd "$TMP/reused" && TSOSS_SUPERVISOR_MAX_FAILURES=1 TSOSS_SUPERVISOR_FOREGROUND=true sh ./tricky.sh --worker) > "$TMP/reused/log" 2>&1
 reused_status=$?
 set -e
 kill "$unrelated_pid" 2>/dev/null || true
@@ -153,7 +153,7 @@ kill "$unrelated_pid" 2>/dev/null || true
 
 # Matching PID and boot ID with a different start time is a reused PID, not an owner.
 mkdir -p "$TMP/mismatch/.service.lock"
-cp "$SERVICE" "$TMP/mismatch/service.sh"
+cp "$SERVICE" "$TMP/mismatch/tricky.sh"
 cat > "$TMP/mismatch/daemon" <<'MOCK'
 #!/bin/sh
 exit 99
@@ -165,7 +165,7 @@ printf '%s\n' "$$" > "$TMP/mismatch/.service.lock/pid"
 printf '%s\n' "$current_boot_id" > "$TMP/mismatch/.service.lock/boot_id"
 printf '%s\n' "${current_starttime}0" > "$TMP/mismatch/.service.lock/starttime"
 set +e
-(cd "$TMP/mismatch" && TSOSS_SUPERVISOR_MAX_FAILURES=1 TSOSS_SUPERVISOR_FOREGROUND=true sh ./service.sh --worker) > "$TMP/mismatch/log" 2>&1
+(cd "$TMP/mismatch" && TSOSS_SUPERVISOR_MAX_FAILURES=1 TSOSS_SUPERVISOR_FOREGROUND=true sh ./tricky.sh --worker) > "$TMP/mismatch/log" 2>&1
 mismatch_status=$?
 set -e
 [ "$mismatch_status" -ne 0 ] || fail "mismatched start time should be reclaimed"
@@ -173,13 +173,13 @@ set -e
 
 # A lock without a PID may still be in the creator's mkdir/write window.
 mkdir -p "$TMP/initializing/.service.lock"
-cp "$SERVICE" "$TMP/initializing/service.sh"
+cp "$SERVICE" "$TMP/initializing/tricky.sh"
 cat > "$TMP/initializing/daemon" <<'MOCK'
 #!/bin/sh
 exit 99
 MOCK
 chmod +x "$TMP/initializing/daemon"
-(cd "$TMP/initializing" && sh ./service.sh --worker) >/dev/null 2>&1
+(cd "$TMP/initializing" && sh ./tricky.sh --worker) >/dev/null 2>&1
 [ -d "$TMP/initializing/.service.lock" ] || fail "supervisor removed a lock while its owner PID was being written"
 [ ! -e "$TMP/initializing/invocations" ] || fail "supervisor started a daemon while lock ownership was unknown"
 
@@ -187,7 +187,7 @@ chmod +x "$TMP/initializing/daemon"
 # builtin kill is used after the service starts to verify its own process lock.
 mkdir -p "$TMP/stale/.service.lock"
 echo 99999999 > "$TMP/stale/.service.lock/pid"
-cp "$SERVICE" "$TMP/stale/service.sh"
+cp "$SERVICE" "$TMP/stale/tricky.sh"
 cat > "$TMP/stale/daemon" <<'MOCK'
 #!/bin/sh
 printf '%s\n' "$*" >> "$MOCK_LOG"
@@ -197,7 +197,7 @@ chmod +x "$TMP/stale/daemon"
 : > "$TMP/stale/invocations"
 export MOCK_LOG="$TMP/stale/invocations"
 set +e
-(cd "$TMP/stale" && TSOSS_SUPERVISOR_MAX_FAILURES=1 TSOSS_SUPERVISOR_FOREGROUND=true sh ./service.sh --worker) > "$TMP/stale/log" 2>&1
+(cd "$TMP/stale" && TSOSS_SUPERVISOR_MAX_FAILURES=1 TSOSS_SUPERVISOR_FOREGROUND=true sh ./tricky.sh --worker) > "$TMP/stale/log" 2>&1
 stale_status=$?
 set -e
 [ "$stale_status" -ne 0 ] || fail "stale lock case should run daemon and exhaust"
@@ -207,7 +207,7 @@ set -e
 # The service entry point returns after launching its worker; the worker runs
 # the finite retry budget and releases its lock.
 mkdir -p "$TMP/background"
-cp "$SERVICE" "$TMP/background/service.sh"
+cp "$SERVICE" "$TMP/background/tricky.sh"
 cat > "$TMP/background/daemon" <<'MOCK'
 #!/bin/sh
 printf '%s\n' "$*" >> "$MOCK_LOG"
@@ -217,7 +217,7 @@ chmod +x "$TMP/background/daemon"
 export MOCK_LOG="$TMP/background/invocations"
 : > "$MOCK_LOG"
 if ! (cd "$TMP/background" && TSOSS_SUPERVISOR_MAX_FAILURES=1 \
-  TSOSS_SUPERVISOR_BACKOFF_MAX=1 sh ./service.sh) > "$TMP/background/log" 2>&1; then
+  TSOSS_SUPERVISOR_BACKOFF_MAX=1 sh ./tricky.sh) > "$TMP/background/log" 2>&1; then
   fail "service entry point should return after launching the worker"
 fi
 waited=0
@@ -235,7 +235,7 @@ done
 
 # Terminating a worker removes only its own live lock.
 mkdir -p "$TMP/signaled"
-cp "$SERVICE" "$TMP/signaled/service.sh"
+cp "$SERVICE" "$TMP/signaled/tricky.sh"
 cat > "$TMP/signaled/daemon" <<'MOCK'
 #!/bin/sh
 printf '%s\n' "$$" > "$DAEMON_PID_FILE"
@@ -243,7 +243,7 @@ exec sleep 60
 MOCK
 chmod +x "$TMP/signaled/daemon"
 export DAEMON_PID_FILE="$TMP/signaled/daemon.pid"
-(cd "$TMP/signaled" && TSOSS_SUPERVISOR_FOREGROUND=true sh ./service.sh --worker) > "$TMP/signaled/log" 2>&1 &
+(cd "$TMP/signaled" && TSOSS_SUPERVISOR_FOREGROUND=true sh ./tricky.sh --worker) > "$TMP/signaled/log" 2>&1 &
 lock_owner=$!
 waited=0
 while [ ! -s "$DAEMON_PID_FILE" ] && [ "$waited" -lt 5 ]; do

@@ -1,5 +1,4 @@
-name: Build
-
+name: Tricky Backend CI
 on:
   push:
     branches: [ "integrity-box" ]
@@ -76,6 +75,17 @@ jobs:
           echo "debugName=$(basename "$DEBUG_FILE" .zip)" >> "$GITHUB_OUTPUT"
           echo "releaseFile=$RELEASE_FILE" >> "$GITHUB_OUTPUT"
           echo "debugFile=$DEBUG_FILE" >> "$GITHUB_OUTPUT"
+
+          for ZIP in "$RELEASE_FILE" "$DEBUG_FILE"; do
+            if ! unzip -Z1 "$ZIP" | grep -qx "attestation.dex"; then
+              echo "::error::$(basename "$ZIP") does not contain attestation.dex"
+              exit 1
+            fi
+            if unzip -Z1 "$ZIP" | grep -qx "attestation.apk"; then
+              echo "::error::$(basename "$ZIP") unexpectedly contains attestation.apk"
+              exit 1
+            fi
+          done
 
       - name: Upload release
         uses: actions/upload-artifact@v7

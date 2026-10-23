@@ -136,9 +136,18 @@ androidComponents {
                 check(apks.size == 1) { "Expected exactly one APK output for $variantName, found ${apks.size}" }
                 val apk = apks.single()
 
-                apk.copyTo(tempDir.resolve("attestation.apk"), overwrite = true)
-
                 ZipFile(apk).use { zip ->
+                    val dexEntry = zip.getEntry("classes.dex")
+                        ?: error("Generated APK does not contain classes.dex: ${apk.absolutePath}")
+
+                    val dexDestination = tempDir.resolve("attestation.dex")
+                    zip.getInputStream(dexEntry).use { input ->
+                        dexDestination.outputStream().use(input::copyTo)
+                    }
+                    check(dexDestination.length() > 0L) {
+                        "Extracted attestation.dex is empty for $variantName"
+                    }
+
                     val entries = zip.entries()
                     while (entries.hasMoreElements()) {
                         val entry = entries.nextElement()
