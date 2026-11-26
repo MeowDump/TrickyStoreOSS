@@ -20,7 +20,7 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
--keepclasseswithmembers class io.github.beakthoven.TrickyStoreOSS.MainKt {
+-keep class io.github.beakthoven.TrickyStoreOSS.MainKt {
     public static void main(java.lang.String[]);
 }
 
@@ -57,7 +57,6 @@
     public static final ** CREATOR;
 }
 
--repackageclasses
 -allowaccessmodification
 -overloadaggressively
 -keepattributes SourceFile,LineNumberTable,LocalVariableTable
