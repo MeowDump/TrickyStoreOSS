@@ -93,10 +93,12 @@ for file in tricky.sh; do
   chmod 755 "$BOOT/tricky.sh"
 done
 
-if unzip -l "$ZIPFILE" | grep -E '[[:space:]]attestation\.dex$' >/dev/null; then
+if unzip -Z1 "$ZIPFILE" | grep -qx "attestation.dex"; then
   install_file "attestation.dex" "$INTEGRITY_BOX"
+elif unzip -Z1 "$ZIPFILE" | grep -qx "attestation.apk"; then
+  install_file "attestation.apk" "$INTEGRITY_BOX"
 else
-  abort "! attestation.dex not found in update ZIP"
+  abort "! Neither attestation.dex nor attestation.apk found in update ZIP"
 fi
 
 ui_print "- Extracting $ARCH libraries"
