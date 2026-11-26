@@ -1,12 +1,15 @@
 #!/system/bin/sh
 
-MODDIR=/data/adb/modules/integrity-box
+MODDIR=$1
 
-if [ ! -f "$MODDIR/attestation.dex" ]; then
-    echo "Error: attestation.dex not found in $MODDIR"
+# Determine classpath
+if [ -f "$MODDIR/attestation.dex" ]; then
+    CLASSPATH="$MODDIR/attestation.dex"
+elif [ -f "$MODDIR/attestation.apk" ]; then
+    CLASSPATH="$MODDIR/attestation.apk"
+else
+    echo "Error: Neither attestation.dex nor attestation.apk found in $MODDIR"
     exit 1
 fi
-
-CLASSPATH="$MODDIR/attestation.dex"
 
 exec /system/bin/app_process -Djava.class.path="$CLASSPATH" "$MODDIR" --nice-name=TrickyStoreOSS io.github.beakthoven.TrickyStoreOSS.MainKt
