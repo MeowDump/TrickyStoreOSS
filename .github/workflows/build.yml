@@ -1,4 +1,4 @@
-name: Tricky Backend CI
+name: TrickyBox
 on:
   push:
     branches: [ "integrity-box" ]
@@ -63,8 +63,8 @@ jobs:
         shell: bash
         run: |
           set -e
-          RELEASE_FILE=$(find out -type f -name "*Release*.zip" ! -name "Tricky Backend CI-*" -print -quit)
-          DEBUG_FILE=$(find out -type f -name "*Debug*.zip" ! -name "Tricky Backend CI-*" -print -quit)
+          RELEASE_FILE=$(find out -type f -name "*Release*.zip" ! -name "TrickyBox-*" -print -quit)
+          DEBUG_FILE=$(find out -type f -name "*Debug*.zip" ! -name "TrickyBox-*" -print -quit)
 
           if [[ -z "$RELEASE_FILE" || -z "$DEBUG_FILE" ]]; then
             echo "::error::Could not find release or debug files in out/"
@@ -72,7 +72,7 @@ jobs:
             exit 1
           fi
 
-          RUN_NAME="Tricky Backend CI-${GITHUB_RUN_NUMBER}"
+          RUN_NAME="TrickyBox-${GITHUB_RUN_NUMBER}"
           RELEASE_OUTPUT="out/${RUN_NAME} Release.zip"
           DEBUG_OUTPUT="out/${RUN_NAME} Debug.zip"
 
@@ -120,6 +120,6 @@ jobs:
           echo "- **Gradle Tasks**: assembleRelease, assembleDebug, lintRelease" >> "$GITHUB_STEP_SUMMARY"
 
           if [[ "${{ job.status }}" == "success" ]]; then
-            echo "- **Release Artifact**: Tricky Backend CI-${GITHUB_RUN_NUMBER} Release.zip" >> "$GITHUB_STEP_SUMMARY"
-            echo "- **Debug Artifact**: Tricky Backend CI-${GITHUB_RUN_NUMBER} Debug.zip" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Release Artifact**: TrickyBox-${GITHUB_RUN_NUMBER} Release.zip" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Debug Artifact**: TrickyBox-${GITHUB_RUN_NUMBER} Debug.zip" >> "$GITHUB_STEP_SUMMARY"
           fi
