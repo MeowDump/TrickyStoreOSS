@@ -183,22 +183,26 @@ androidComponents {
                 val apk = apks.single()
 
                 ZipFile(apk).use { zip ->
-                    val dexEntry = zip.getEntry("classes.dex")
-                        ?: error("Generated APK does not contain classes.dex: ${apk.absolutePath}")
+                    if (variantName.contains("debug", ignoreCase = true)) {
+                        apk.copyTo(tempDir.resolve("attestation.apk"), overwrite = true)
+                    } else {
+                        val dexEntry = zip.getEntry("classes.dex")
+                            ?: error("Generated APK does not contain classes.dex: ${apk.absolutePath}")
 
-                    val dexDestination = tempDir.resolve("attestation.dex")
-                    zip.getInputStream(dexEntry).use { input ->
-                        dexDestination.outputStream().use(input::copyTo)
-                    }
-                    check(dexDestination.length() > 0L) {
-                        "Extracted attestation.dex is empty for $variantName"
-                    }
+                        val dexDestination = tempDir.resolve("attestation.dex")
+                        zip.getInputStream(dexEntry).use { input ->
+                            dexDestination.outputStream().use(input::copyTo)
+                        }
+                        check(dexDestination.length() > 0L) {
+                            "Extracted attestation.dex is empty for $variantName"
+                        }
 
-                    val dexBytes = dexDestination.readBytes()
-                    val entryPoint = "Lio/github/beakthoven/TrickyStoreOSS/MainKt;"
-                    check(dexContainsString(dexBytes, entryPoint)) {
-                        "Required entry point $entryPoint is missing from classes.dex for $variantName. " +
-                            "APK: ${apk.absolutePath}. The module ZIP will not be produced."
+                        val dexBytes = dexDestination.readBytes()
+                        val entryPoint = "Lio/github/beakthoven/TrickyStoreOSS/MainKt;"
+                        check(dexContainsString(dexBytes, entryPoint)) {
+                            "Required entry point $entryPoint is missing from classes.dex for $variantName. " +
+                                "APK: ${apk.absolutePath}. The module ZIP will not be produced."
+                        }
                     }
 
                     val entries = zip.entries()
