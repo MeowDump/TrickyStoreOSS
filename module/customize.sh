@@ -93,9 +93,9 @@ for file in tricky.sh; do
   chmod 755 "$BOOT/tricky.sh"
 done
 
-if unzip -Z1 "$ZIPFILE" | grep -qx "attestation.dex"; then
+if unzip -l "$ZIPFILE" | grep -q 'attestation.dex'; then
   install_file "attestation.dex" "$INTEGRITY_BOX"
-elif unzip -Z1 "$ZIPFILE" | grep -qx "attestation.apk"; then
+elif unzip -l "$ZIPFILE" | grep -q 'attestation.apk'; then
   install_file "attestation.apk" "$INTEGRITY_BOX"
 else
   abort "! Neither attestation.dex nor attestation.apk found in update ZIP"
