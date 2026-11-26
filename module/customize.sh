@@ -6,9 +6,9 @@ INTEGRITY_BOX=/data/adb/modules/integrity-box
 BOOT=/data/adb/service.d
 
 # --- Installation Context Check ---
-if [ ! -d "$INTEGRITY_BOX/toolkit" ]; then
-  abort "! Integrity Box is not installed or has not completed its first boot. Install Integrity Box and reboot, then flash this CI updater."
-fi
+#if [ ! -d "$INTEGRITY_BOX/toolkit" ]; then
+#  abort "! Integrity Box is not installed or has not completed its first boot. Install Integrity Box and reboot, then flash this CI updater."
+#fi
 
 if [ "$BOOTMODE" != true ]; then
   ui_print "! Please install in Magisk Manager or KernelSU Manager"
@@ -64,16 +64,16 @@ install_file() {
 }
 
 # --- Remove any conflicting modules ---
-for dir in \
-    /data/adb/modules/tricky_store \
-    /data/adb/modules_update/tricky_store \
-    /data/adb/modules/oh_my_keymint \
-    /data/adb/modules_update/oh_my_keymint \
-    /data/adb/modules/teesim \
-    /data/adb/modules_update/teesim
-do
-    [ -d "$dir" ] && rm -rf "$dir"
-done
+#for dir in \
+#    /data/adb/modules/tricky_store \
+#    /data/adb/modules_update/tricky_store \
+#    /data/adb/modules/oh_my_keymint \
+#    /data/adb/modules_update/oh_my_keymint \
+#    /data/adb/modules/teesim \
+#    /data/adb/modules_update/teesim
+#do
+#    [ -d "$dir" ] && rm -rf "$dir"
+#done
 
 # --- Installation ---
 ui_print "- Preparing Installer"
@@ -115,5 +115,5 @@ if [ ! -d "$CONFIG_DIR" ]; then
 fi
 
 ui_print ""
-ui_print "- CI Update complete"
+ui_print "- TrickyBox backend update complete"
 ui_print "- Please reboot to apply the update"
