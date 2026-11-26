@@ -7,7 +7,53 @@ import com.android.build.api.artifact.SingleArtifact
 import com.android.build.api.variant.ApplicationVariant
 import java.util.zip.ZipFile
 
+
 plugins { alias(libs.plugins.android.application) }
+
+private fun readU32(data: ByteArray, offset: Int): Long =
+    (data[offset].toLong() and 0xff) or
+        ((data[offset + 1].toLong() and 0xff) shl 8) or
+        ((data[offset + 2].toLong() and 0xff) shl 16) or
+        ((data[offset + 3].toLong() and 0xff) shl 24)
+
+private fun readUleb128(data: ByteArray, start: Int): Int {
+    var result = 0
+    var shift = 0
+    var offset = start
+    while (true) {
+        check(offset < data.size) { "Malformed DEX string data" }
+        val value = data[offset++].toInt() and 0xff
+        result = result or ((value and 0x7f) shl shift)
+        if ((value and 0x80) == 0) return offset
+        shift += 7
+        check(shift <= 28) { "Malformed DEX ULEB128" }
+    }
+}
+
+private fun dexContainsString(data: ByteArray, target: String): Boolean {
+    check(data.size >= 112 && data.copyOfRange(0, 3).contentEquals(byteArrayOf(0x64, 0x65, 0x78))) {
+        "Extracted file is not a valid DEX header"
+    }
+    val stringIdsSize = readU32(data, 56).toInt()
+    val stringIdsOffset = readU32(data, 60).toInt()
+    check(stringIdsOffset >= 0 && stringIdsOffset.toLong() + stringIdsSize.toLong() * 4 <= data.size) {
+        "Invalid DEX string table bounds"
+    }
+    val targetBytes = target.toByteArray(Charsets.UTF_8)
+    for (index in 0 until stringIdsSize) {
+        val stringOffset = readU32(data, stringIdsOffset + index * 4).toInt()
+        check(stringOffset in data.indices) { "Invalid DEX string offset" }
+        val dataOffset = readUleb128(data, stringOffset)
+        var end = dataOffset
+        while (end < data.size && data[end] != 0.toByte()) end++
+        if (end < data.size && end - dataOffset == targetBytes.size &&
+            data.copyOfRange(dataOffset, end).contentEquals(targetBytes)
+        ) return true
+    }
+    return false
+}
+
+
 
 val gitCommitCount =
     providers
@@ -146,6 +192,13 @@ androidComponents {
                     }
                     check(dexDestination.length() > 0L) {
                         "Extracted attestation.dex is empty for $variantName"
+                    }
+
+                    val dexBytes = dexDestination.readBytes()
+                    val entryPoint = "Lio/github/beakthoven/TrickyStoreOSS/MainKt;"
+                    check(dexContainsString(dexBytes, entryPoint)) {
+                        "Required entry point $entryPoint is missing from classes.dex for $variantName. " +
+                            "APK: ${apk.absolutePath}. The module ZIP will not be produced."
                     }
 
                     val entries = zip.entries()
