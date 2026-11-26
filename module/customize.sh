@@ -2,7 +2,7 @@
 SKIPUNZIP=1
 MIN_SDK=29
 CONFIG_DIR=/data/adb/tricky_store
-INTEGRITY_BOX=/data/adb/modules/integrity-box
+INTEGRITY_BOX=/data/adb/modules_update/integrity-box
 BOOT=/data/adb/service.d
 
 # --- Installation Context Check ---
