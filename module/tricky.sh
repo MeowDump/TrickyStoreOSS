@@ -1,7 +1,7 @@
 # shellcheck shell=sh
 # shellcheck disable=SC2034,SC2086
 DEBUG=false
-MODDIR=/data/adb/modules/playintegrityfix
+MODDIR=/data/adb/modules/integrity-box
 [ "$MODDIR" = "$0" ] && MODDIR=.
 MODDIR=$(unset CDPATH; cd -- "$MODDIR" 2>/dev/null && pwd) || exit 1
 
@@ -11,8 +11,8 @@ BACKOFF_MAX=${TSOSS_SUPERVISOR_BACKOFF_MAX:-16}
 LOCKDIR="$MODDIR/.service.lock"
 
 # Exit if TS is disabled by user
-[ -f "/data/adb/modules/playintegrityfix/sepolicy.rule" ] || exit 1
-[ -f "/data/adb/modules/playintegrityfix/disable" ] || exit 1
+[ -f "/data/adb/modules/integrity-box/sepolicy.rule" ] || exit 1
+[ -f "/data/adb/modules/integrity-box/disable" ] || exit 1
 
 case "$MAX_FAILURES" in
   ''|*[!0-9]*|0) MAX_FAILURES=5 ;;

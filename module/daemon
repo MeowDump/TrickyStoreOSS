@@ -1,6 +1,6 @@
 #!/system/bin/sh
 
-MODDIR=/data/adb/modules/playintegrityfix
+MODDIR=/data/adb/modules/integrity-box
 
 if [ ! -f "$MODDIR/attestation.dex" ]; then
     echo "Error: attestation.dex not found in $MODDIR"
