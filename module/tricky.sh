@@ -4,15 +4,27 @@ DEBUG=false
 MODDIR=/data/adb/modules/integrity-box
 [ "$MODDIR" = "$0" ] && MODDIR=.
 MODDIR=$(unset CDPATH; cd -- "$MODDIR" 2>/dev/null && pwd) || exit 1
+. $MODDIR/common_func.sh
 
-MAX_FAILURES=${TSOSS_SUPERVISOR_MAX_FAILURES:-5}
-STABILITY_SECONDS=${TSOSS_SUPERVISOR_STABILITY_SECONDS:-30}
-BACKOFF_MAX=${TSOSS_SUPERVISOR_BACKOFF_MAX:-16}
-LOCKDIR="$MODDIR/.service.lock"
+BOX="/data/adb/Box-Brain/TrickyBox"
+MAX_FAILURES=${TSOSS_SUPERVISOR_MAX_FAILURES:-20}
+STABILITY_SECONDS=${TSOSS_SUPERVISOR_STABILITY_SECONDS:-60}
+BACKOFF_MAX=${TSOSS_SUPERVISOR_BACKOFF_MAX:-30}
+LOCKDIR="$BOX/.service.lock"
 
-# Exit if TS is disabled by user
-[ -f "/data/adb/modules/integrity-box/sepolicy.rule" ] || exit 1
-[ -f "/data/adb/modules/integrity-box/disable" ] || exit 1
+trickybox_log() {
+    printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1" | tee -a "$BOX/trickybox.log"
+}
+
+# Wait for boot
+if [ -n "$RESETPROP_RS" ]; then
+    $PROP_WAIT sys.boot_completed 1
+else
+    $PROP_WAIT sys.boot_completed 0
+fi
+
+# Stop when other attestation modules are installed 
+detect_conflict || exit 1
 
 case "$MAX_FAILURES" in
   ''|*[!0-9]*|0) MAX_FAILURES=5 ;;
@@ -29,7 +41,7 @@ esac
 
 if [ "${1:-}" != --worker ] && [ "${TSOSS_SUPERVISOR_FOREGROUND:-false}" != true ]; then
   # Launch a detached worker with direct file redirection
-  sh "$0" --worker </dev/null >>"$MODDIR/service.log" 2>&1 &
+  sh "$0" --worker </dev/null >>"$BOX/service.log" 2>&1 &
   exit 0
 fi
 
